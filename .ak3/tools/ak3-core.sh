@@ -253,12 +253,65 @@ flash_boot() {
   done;
 
   cd $home;
-  for i in zImage zImage-dtb Image Image-dtb Image.gz Image.gz-dtb Image.bz2 Image.bz2-dtb Image.lzo Image.lzo-dtb Image.lzma Image.lzma-dtb Image.xz Image.xz-dtb Image.lz4 Image.lz4-dtb Image.fit; do
-    if [ -f $i ]; then
-      kernel=$home/$i;
-      break;
-    fi;
-  done;
+#  for i in zImage zImage-dtb Image Image-dtb Image.gz Image.gz-dtb Image.bz2 Image.bz2-dtb Image.lzo Image.lzo-dtb Image.lzma Image.lzma-dtb Image.xz Image.xz-dtb Image.lz4 Image.lz4-dtb Image.fit; do
+#    if [ -f $i ]; then
+#      kernel=$home/$i;
+#      break;
+#    fi;
+#  done;
+  case "$(cat /sys/firmware/devicetree/base/model)" in
+    "Qualcomm Technologies, Inc. MSM8917-PMI8937 QRD SKU5")
+      if [ -e "/sys/class/leds/infrared/transmit" ]; then
+        DTB_FILE="msm8917-pmi8937-qrd-sku5-rolex.dtb"
+      elif [ -e "/dev/spidev7.1" ]; then
+        DTB_FILE="msm8917-pmi8937-qrd-sku5-riva.dtb"
+      else
+        DTB_FILE="msm8917-pmi8937-qrd-sku5-tiare.dtb"
+      fi
+      ;;
+    "Qualcomm Technologies, Inc. MSM8917 QRD SKU5")
+      DTB_FILE="msm8917-pmi8937-qrd-sku5-riva-Oreo.dtb"
+      ;;
+    "Qualcomm Technologies, Inc. MSM8917-PMI8937 MTP")
+      DTB_FILE="msm8917-pmi8937-mtp-ugglite.dtb"
+      ;;
+    "Qualcomm Technologies, Inc. MSM8940-PMI8937 MTP")
+      DTB_FILE="msm8940-pmi8937-mtp-ugg.dtb"
+      ;;
+    "Qualcomm Technologies, Inc. MSM8937-PMI8950 QRD SKU1")
+      DTB_FILE="msm8937-pmi8950-qrd-land.dtb"
+      ;;
+    "Qualcomm Technologies, Inc. MSM8940-PMI8950 QRD SKU7")
+      DTB_FILE="msm8940-pmi8950-qrd-sku7-santoni.dtb"
+      ;;
+    "Qualcomm Technologies, Inc. MSM8937-PMI8950 MTP")
+      DTB_FILE="msm8937-pmi8950-mtp-prada.dtb"
+      ;;
+    *)
+      abort "Fatal Error: Unable to determine device from devicetree!"
+      ;;
+  esac
+  if [ "$PARTITION" == "boot" ]; then
+    if [ -e "/vendor/etc/vintf/manifest/vendor.qti.hardware.vibrator.service.xml" ]; then
+      DTB_DIR=dtbs-newvib
+      ui_print "Detected QTI Vibrator AIDL, Use new vibrator drivers."
+    else
+      DTB_DIR=dtbs-oldvib
+      ui_print "Not detected QTI Vibrator AIDL, Use old vibrator drivers."
+    fi
+    ui_print "****************************"
+    ui_print " Note: Wrong vibrator driver"
+    ui_print "  might prevent the ROM to"
+    ui_print "  to boot."
+    ui_print ""
+    ui_print "  !Just flash the backup!"
+    ui_print "  ! if it does not boot !"
+    ui_print "****************************"
+  else
+    DTB_DIR=dtbs-oldvib
+  fi
+  cat Image.gz $DTB_DIR/$DTB_FILE > Image.gz-dtb
+  kernel=$home/Image.gz-dtb
   if [ "$kernel" ]; then
     if [ -f "$bin/mkmtkhdr" -a -f "$split_img/boot.img-base" ]; then
       $bin/mkmtkhdr --kernel $kernel;
@@ -632,6 +685,10 @@ patch_fstab() {
 
 # patch_cmdline <cmdline entry name> <replacement string>
 patch_cmdline() {
+  if ! grep -E "^cmdline=" $split_img/header|grep "$1" > /dev/null; then
+    /sbin/sed -i "s|cmdline=|cmdline=${2} |g" $split_img/header
+  fi
+  return 0;
   local cmdfile cmdtmp match;
   if [ -f "$split_img/cmdline.txt" ]; then
     cmdfile=$split_img/cmdline.txt;
